@@ -1,8 +1,8 @@
-# ECHL Tracker Card
+# Hockey Tracker Card
 
-A [Home Assistant](https://www.home-assistant.io/) Lovelace card that displays live scores, game state, and upcoming schedule for any ECHL team.
+A [Home Assistant](https://www.home-assistant.io/) Lovelace card that displays live scores, schedule, and recent results for any **ECHL**, **AHL**, or **NHL** team.
 
-> **Requires:** [ha-echl-tracker](https://github.com/linkian19/ha-echl-tracker) integration to be installed and configured first.
+> **Requires:** [ha-hockey-tracker](https://github.com/linkian19/ha-hockey-tracker) integration to be installed and a team sensor configured first.
 
 ---
 
@@ -10,10 +10,14 @@ A [Home Assistant](https://www.home-assistant.io/) Lovelace card that displays l
 
 - Live scoreboard with period and game clock
 - Shots on goal (home and away)
-- State badges: `LIVE`, `PRE`, `FINAL`, `NO GAME`
-- Next game preview with opponent, date, and venue
-- Optional team logo display
-- Configurable via the Home Assistant UI card editor — no YAML required
+- State badge in top bar: `LIVE`, `PRE-GAME`, `FINAL`, `NO GAME`
+- Team name title centered in top bar (auto-derived or custom)
+- Configurable team logo size
+- 30-minute post-game window — keeps the scoreboard visible after a final horn
+- Pre-game upcoming view with team matchup, start time, and venue
+- Next game preview when no game is active
+- Optional recent game results list (W/L, score, opponent, date)
+- Full UI editor — no YAML required
 
 ---
 
@@ -23,17 +27,16 @@ A [Home Assistant](https://www.home-assistant.io/) Lovelace card that displays l
 
 1. In Home Assistant, open **HACS → Frontend**
 2. Click the three-dot menu → **Custom repositories**
-3. Add `https://github.com/linkian19/ha-echl-tracker-card` with category **Lovelace**
-4. Search for "ECHL Tracker Card" and install
-5. Add the resource (HACS usually handles this automatically — if not, see Manual step 3)
-6. Reload your browser
+3. Add `https://github.com/linkian19/ha-hockey-tracker-card` with category **Lovelace**
+4. Search for **Hockey Tracker Card** and install
+5. Reload your browser
 
 ### Manual
 
-1. Download `dist/echl-tracker-card.js` from this repo
-2. Copy it to `config/www/echl-tracker-card.js` in your Home Assistant instance
+1. Download `hockey-tracker-card.js` from this repo
+2. Copy it to `config/www/hockey-tracker-card.js` in your Home Assistant instance
 3. Go to **Settings → Dashboards → Resources** and add:
-   - **URL:** `/local/echl-tracker-card.js`
+   - **URL:** `/local/hockey-tracker-card.js`
    - **Type:** JavaScript Module
 4. Reload your browser
 
@@ -42,13 +45,13 @@ A [Home Assistant](https://www.home-assistant.io/) Lovelace card that displays l
 ## Adding the Card
 
 1. Edit a dashboard and click **Add Card**
-2. Search for **ECHL Tracker** (or scroll to "Custom: ECHL Tracker Card")
-3. Configure using the UI editor
+2. Search for **Hockey Tracker** (or scroll to "Custom: Hockey Tracker Card")
+3. Select your sensor entity and configure using the UI editor
 
 Or add manually with YAML:
 
 ```yaml
-type: custom:echl-tracker-card
+type: custom:hockey-tracker-card
 entity: sensor.kansas_city_mavericks_game
 ```
 
@@ -58,33 +61,45 @@ entity: sensor.kansas_city_mavericks_game
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `entity` | string | **required** | The ECHL tracker sensor entity |
-| `title` | string | team name | Override the card title |
-| `logo_url` | string | — | URL to a team logo image |
-| `show_logo` | boolean | `true` | Show the logo / icon in the header |
-| `show_shots` | boolean | `true` | Show shots on goal row |
+| `entity` | string | **required** | The Hockey Tracker sensor entity |
+| `title` | string | team name | Override the card title (leave blank to auto-derive from sensor) |
+| `show_logo` | boolean | `true` | Show team logos |
+| `logo_size` | number | `64` | Logo size in pixels (24–200) |
+| `show_shots` | boolean | `true` | Show shots on goal row during live/final games |
 | `show_next_game` | boolean | `true` | Show next game info when no game is active |
+| `show_recent_games` | boolean | `false` | Show recent game results below the main view |
+| `recent_games_count` | number | `3` | Number of recent games to show (1–10) |
 
 ### Example with all options
 
 ```yaml
-type: custom:echl-tracker-card
+type: custom:hockey-tracker-card
 entity: sensor.kansas_city_mavericks_game
 title: KC Mavericks
-logo_url: https://example.com/mavericks-logo.png
 show_logo: true
+logo_size: 80
 show_shots: true
 show_next_game: true
+show_recent_games: true
+recent_games_count: 5
 ```
 
 ---
 
-## Finding Your Team Logo URL
+## Display Modes
 
-The ECHL hosts team logos through the HockeyTech CDN. You can right-click any team logo on [echl.com](https://www.echl.com/) and copy the image address to use as your `logo_url`.
+The card automatically switches between views based on game state:
+
+| Situation | View shown |
+|-----------|------------|
+| Game in progress (`LIVE`) | Full scoreboard with period/clock |
+| Within 30 min of puck drop (`PRE`) | Full scoreboard layout, no scores yet |
+| More than 30 min before game (`PRE`) | Upcoming matchup with start time |
+| Within 30 min of final horn (`FINAL`) | Full scoreboard with final scores |
+| More than 30 min after final, or `NO_GAME` | Next game preview |
 
 ---
 
 ## Issues & Contributing
 
-Please open an issue at [github.com/linkian19/ha-echl-tracker-card/issues](https://github.com/linkian19/ha-echl-tracker-card/issues).
+Please open an issue at [github.com/linkian19/ha-hockey-tracker-card/issues](https://github.com/linkian19/ha-hockey-tracker-card/issues).
