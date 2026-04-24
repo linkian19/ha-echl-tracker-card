@@ -1,11 +1,11 @@
 /**
- * ECHL Tracker Card
+ * ECHL Tracker Card v1.1.0
  * https://github.com/linkian19/ha-echl-tracker-card
  */
 import { LitElement, html, css } from "https://unpkg.com/lit@2.8.0/index.js?module";
 
 // ---------------------------------------------------------------------------
-// Editor — uses ha-form for the standard HA configuration UI
+// Editor
 // ---------------------------------------------------------------------------
 
 class EchlTrackerCardEditor extends LitElement {
@@ -19,51 +19,34 @@ class EchlTrackerCardEditor extends LitElement {
 
   static get _schema() {
     return [
+      { name: "entity", required: true, selector: { entity: { domain: "sensor" } } },
+      { name: "title", selector: { text: {} } },
+      { name: "show_logo", selector: { boolean: {} } },
+      { name: "show_shots", selector: { boolean: {} } },
+      { name: "show_next_game", selector: { boolean: {} } },
+      { name: "show_recent_games", selector: { boolean: {} } },
       {
-        name: "entity",
-        required: true,
-        selector: { entity: { domain: "sensor" } },
-      },
-      {
-        name: "title",
-        selector: { text: {} },
-      },
-      {
-        name: "logo_url",
-        selector: { text: {} },
-      },
-      {
-        name: "show_logo",
-        selector: { boolean: {} },
-      },
-      {
-        name: "show_shots",
-        selector: { boolean: {} },
-      },
-      {
-        name: "show_next_game",
-        selector: { boolean: {} },
+        name: "recent_games_count",
+        selector: { number: { min: 1, max: 10, step: 1, mode: "box" } },
       },
     ];
   }
 
   _computeLabel(schema) {
-    const labels = {
-      entity: "Sensor Entity",
-      title: "Card Title (leave blank to use team name)",
-      logo_url: "Team Logo URL (optional)",
-      show_logo: "Show team logo",
-      show_shots: "Show shots on goal",
-      show_next_game: "Show next game when no game is active",
-    };
-    return labels[schema.name] ?? schema.name;
+    return {
+      entity:             "Sensor Entity",
+      title:              "Card Title (leave blank to use team name)",
+      show_logo:          "Show team logos",
+      show_shots:         "Show shots on goal",
+      show_next_game:     "Show next game when no game is active",
+      show_recent_games:  "Show recent game results",
+      recent_games_count: "Number of recent games to show (max 10)",
+    }[schema.name] ?? schema.name;
   }
 
   _valueChanged(ev) {
     ev.stopPropagation();
-    this.dispatchEvent(
-      new CustomEvent("config-changed", { detail: { config: ev.detail.value } })
-    );
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: ev.detail.value } }));
   }
 
   render() {
@@ -91,119 +74,228 @@ class EchlTrackerCard extends LitElement {
     return { hass: {}, config: {} };
   }
 
+  // Track when the sensor first entered FINAL state so we can apply the 30-min buffer
+  _finalAt = null;
+
   static get styles() {
     return css`
       :host { display: block; }
 
-      .content { padding: 16px; }
+      .content { padding: 14px 16px 12px; }
 
-      /* ── Header ─────────────────────────────────────── */
-      .header {
+      /* ── Top bar ─────────────────────────────────────── */
+      .top-bar {
         display: flex;
         align-items: center;
-        gap: 12px;
-        margin-bottom: 14px;
+        margin-bottom: 12px;
       }
-      .team-logo {
-        width: 44px;
-        height: 44px;
-        object-fit: contain;
-        flex-shrink: 0;
-      }
-      .team-name {
-        font-size: 1.05rem;
-        font-weight: 600;
-        color: var(--primary-text-color);
-        flex: 1;
-      }
-
-      /* ── State badge ────────────────────────────────── */
       .badge {
-        padding: 3px 9px;
+        padding: 3px 10px;
         border-radius: 99px;
-        font-size: 0.7rem;
+        font-size: 0.68rem;
         font-weight: 700;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.07em;
         text-transform: uppercase;
-        white-space: nowrap;
       }
       .badge-live  { background: #d32f2f; color: #fff; }
       .badge-pre   { background: #1565c0; color: #fff; }
       .badge-final { background: var(--secondary-text-color); color: #fff; }
       .badge-none  { background: var(--disabled-color, #9e9e9e); color: #fff; }
+      .spacer { flex: 1; }
+      .refresh-btn {
+        --mdc-icon-button-size: 32px;
+        --mdc-icon-size: 18px;
+        color: var(--secondary-text-color);
+        margin-right: -4px;
+      }
 
       /* ── Scoreboard ─────────────────────────────────── */
       .scoreboard {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
-        padding: 14px 0;
+        gap: 4px;
+        padding: 8px 0 10px;
         border-top: 1px solid var(--divider-color);
         border-bottom: 1px solid var(--divider-color);
-        margin-bottom: 10px;
+        margin-bottom: 8px;
       }
-      .team-block { flex: 1; text-align: center; }
-      .team-label {
+      .team-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+      }
+      .team-logo-img {
+        width: 56px;
+        height: 56px;
+        object-fit: contain;
+      }
+      .team-logo-icon {
+        --mdc-icon-size: 48px;
+        color: var(--primary-color);
+      }
+      .team-name {
         font-size: 0.78rem;
+        text-align: center;
         color: var(--secondary-text-color);
-        margin-bottom: 6px;
         line-height: 1.2;
+        word-break: break-word;
       }
       .score {
-        font-size: 2.6rem;
+        font-size: 2.4rem;
         font-weight: 700;
         color: var(--primary-text-color);
         line-height: 1;
       }
-      .vs {
-        font-size: 1.2rem;
+      .score-dash {
+        font-size: 1.4rem;
         color: var(--secondary-text-color);
-        padding: 0 8px;
+      }
+      .mid-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        padding-top: 60px; /* align with score row */
+        gap: 4px;
         flex-shrink: 0;
       }
-
-      /* ── Period / clock ─────────────────────────────── */
-      .period-row {
-        text-align: center;
-        font-size: 0.88rem;
-        font-weight: 500;
+      .at-sign {
+        font-size: 1.1rem;
         color: var(--secondary-text-color);
-        margin-bottom: 8px;
+        font-weight: 600;
       }
 
-      /* ── Stats ──────────────────────────────────────── */
-      .stats-row {
+      /* ── Period / stats ─────────────────────────────── */
+      .period-row, .stats-row, .venue-row {
+        text-align: center;
+        font-size: 0.82rem;
+        color: var(--secondary-text-color);
+        margin-bottom: 4px;
+      }
+      .stats-grid {
         display: flex;
         justify-content: space-between;
         font-size: 0.8rem;
         color: var(--secondary-text-color);
-        padding: 0 4px;
-        margin-top: 4px;
-      }
-      .stats-label { text-align: center; }
-
-      /* ── No game / next game ────────────────────────── */
-      .no-game {
-        text-align: center;
-        padding: 18px 0 8px;
-        color: var(--secondary-text-color);
-        font-size: 0.9rem;
-      }
-      .next-game {
-        border-top: 1px solid var(--divider-color);
-        padding-top: 10px;
-        margin-top: 10px;
-      }
-      .next-game-label {
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--secondary-text-color);
+        padding: 0 2px;
         margin-bottom: 4px;
       }
-      .next-game-detail { font-size: 0.88rem; color: var(--primary-text-color); }
-      .next-game-sub    { font-size: 0.8rem;  color: var(--secondary-text-color); margin-top: 2px; }
+
+      /* ── PRE: start time ────────────────────────────── */
+      .start-time {
+        text-align: center;
+        font-size: 0.9rem;
+        color: var(--primary-text-color);
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+
+      /* ── Upcoming / no game ─────────────────────────── */
+      .upcoming {
+        padding: 10px 0 4px;
+        border-top: 1px solid var(--divider-color);
+      }
+      .upcoming-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--secondary-text-color);
+        margin-bottom: 6px;
+      }
+      .upcoming-teams {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .upcoming-team {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.82rem;
+        color: var(--secondary-text-color);
+        text-align: center;
+      }
+      .upcoming-at {
+        font-size: 0.9rem;
+        color: var(--secondary-text-color);
+        flex-shrink: 0;
+      }
+      .upcoming-time {
+        text-align: center;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: var(--primary-text-color);
+      }
+      .upcoming-venue {
+        text-align: center;
+        font-size: 0.8rem;
+        color: var(--secondary-text-color);
+        margin-top: 2px;
+      }
+      .no-games {
+        padding: 16px 0 8px;
+        text-align: center;
+        color: var(--secondary-text-color);
+        font-size: 0.88rem;
+      }
+
+      /* ── Recent games ───────────────────────────────── */
+      .recent-games {
+        border-top: 1px solid var(--divider-color);
+        margin-top: 10px;
+        padding-top: 8px;
+      }
+      .section-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--secondary-text-color);
+        margin-bottom: 6px;
+      }
+      .recent-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 3px 0;
+        font-size: 0.82rem;
+        border-bottom: 1px solid var(--divider-color);
+      }
+      .recent-row:last-child { border-bottom: none; }
+      .result {
+        font-weight: 700;
+        font-size: 0.78rem;
+        width: 16px;
+        flex-shrink: 0;
+      }
+      .result-w { color: #388e3c; }
+      .result-l { color: #d32f2f; }
+      .recent-opp {
+        flex: 1;
+        color: var(--primary-text-color);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .recent-score {
+        font-weight: 600;
+        color: var(--primary-text-color);
+        flex-shrink: 0;
+      }
+      .recent-date {
+        color: var(--secondary-text-color);
+        flex-shrink: 0;
+        font-size: 0.78rem;
+      }
     `;
   }
 
@@ -212,74 +304,126 @@ class EchlTrackerCard extends LitElement {
   }
 
   static getStubConfig() {
-    return { entity: "", show_logo: true, show_shots: true, show_next_game: true };
+    return {
+      entity: "",
+      show_logo: true,
+      show_shots: true,
+      show_next_game: true,
+      show_recent_games: false,
+      recent_games_count: 3,
+    };
   }
 
   setConfig(config) {
     if (!config.entity) throw new Error("Required: entity");
-    this.config = { show_logo: true, show_shots: true, show_next_game: true, ...config };
+    this.config = {
+      show_logo: true,
+      show_shots: true,
+      show_next_game: true,
+      show_recent_games: false,
+      recent_games_count: 3,
+      ...config,
+    };
   }
 
-  getCardSize() { return 3; }
+  getCardSize() { return 4; }
+
+  // ------------------------------------------------------------------
+  // Display mode
+  // ------------------------------------------------------------------
+
+  _displayMode(state, a) {
+    if (state === "LIVE") {
+      this._finalAt = null;
+      return "game";
+    }
+    if (state === "FINAL") {
+      if (!this._finalAt) this._finalAt = Date.now();
+      return (Date.now() - this._finalAt) / 60000 <= 30 ? "game" : "upcoming";
+    }
+    this._finalAt = null;
+    if (state === "PRE" && a.start_time) {
+      const minsUntil = (new Date(a.start_time) - Date.now()) / 60000;
+      return minsUntil <= 30 ? "game" : "upcoming";
+    }
+    return "upcoming";
+  }
+
+  // ------------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------------
 
   render() {
     if (!this.hass || !this.config) return html``;
 
     const stateObj = this.hass.states[this.config.entity];
     if (!stateObj) {
-      return html`
-        <ha-card>
-          <div class="content">Entity not found: ${this.config.entity}</div>
-        </ha-card>`;
+      return html`<ha-card><div class="content">Entity not found: ${this.config.entity}</div></ha-card>`;
     }
 
     const state = stateObj.state;
     const a = stateObj.attributes;
+    const mode = this._displayMode(state, a);
+
+    const badgeMap = { LIVE: "badge-live", PRE: "badge-pre", FINAL: "badge-final", NO_GAME: "badge-none" };
+    const badgeLabel = { LIVE: "Live", PRE: "Pre-Game", FINAL: "Final", NO_GAME: "No Game" }[state] ?? state;
 
     return html`
       <ha-card>
         <div class="content">
-          ${this._renderHeader(a, state)}
-          ${state === "NO_GAME" ? this._renderNoGame(a) : this._renderGame(a, state)}
+          <div class="top-bar">
+            <span class="badge ${badgeMap[state] ?? 'badge-none'}">${badgeLabel}</span>
+            <span class="spacer"></span>
+            <ha-icon-button class="refresh-btn" label="Refresh" @click=${this._refresh}>
+              <ha-icon icon="mdi:refresh"></ha-icon>
+            </ha-icon-button>
+          </div>
+
+          ${mode === "game"
+            ? this._renderGame(a, state)
+            : this._renderUpcoming(a, state)}
+
+          ${this.config.show_recent_games && a.recent_games?.length
+            ? this._renderRecentGames(a.recent_games)
+            : ""}
         </div>
       </ha-card>
     `;
   }
 
-  _renderHeader(a, state) {
-    const title = this.config.title
-      || (a.is_home ? a.home_team : a.away_team)
-      || "ECHL";
-
-    const badgeClass = { LIVE: "badge-live", PRE: "badge-pre", FINAL: "badge-final", NO_GAME: "badge-none" }[state] ?? "badge-none";
-    const badgeLabel = state === "NO_GAME" ? "No Game" : state;
-
-    return html`
-      <div class="header">
-        ${this.config.show_logo ? html`
-          ${this.config.logo_url
-            ? html`<img class="team-logo" src="${this.config.logo_url}" alt="logo">`
-            : html`<ha-icon icon="mdi:hockey-puck"></ha-icon>`}
-        ` : ""}
-        <span class="team-name">${title}</span>
-        <span class="badge ${badgeClass}">${badgeLabel}</span>
-      </div>
-    `;
-  }
+  // ------------------------------------------------------------------
+  // Game view (LIVE, FINAL ≤30min, PRE ≤30min)
+  // ------------------------------------------------------------------
 
   _renderGame(a, state) {
+    const showScores = state !== "PRE";
+
     return html`
       <div class="scoreboard">
-        <div class="team-block">
-          <div class="team-label">${a.away_team ?? "Away"}</div>
-          <div class="score">${a.away_score ?? "—"}</div>
+        <div class="team-col">
+          ${this._logo(a.away_logo_url)}
+          <div class="team-name">${a.away_team ?? "Away"}</div>
+          ${showScores
+            ? html`<div class="score">${a.away_score ?? "—"}</div>`
+            : html`<div class="score-dash">—</div>`}
         </div>
-        <div class="vs">@</div>
-        <div class="team-block">
-          <div class="team-label">${a.home_team ?? "Home"}</div>
-          <div class="score">${a.home_score ?? "—"}</div>
+
+        <div class="mid-col">
+          <span class="at-sign">@</span>
+        </div>
+
+        <div class="team-col">
+          ${this._logo(a.home_logo_url)}
+          <div class="team-name">${a.home_team ?? "Home"}</div>
+          ${showScores
+            ? html`<div class="score">${a.home_score ?? "—"}</div>`
+            : html`<div class="score-dash">—</div>`}
         </div>
       </div>
+
+      ${state === "PRE" ? html`
+        <div class="start-time">${this._fmtGameTime(a.start_time)}</div>
+      ` : ""}
 
       ${state === "LIVE" && (a.period || a.clock) ? html`
         <div class="period-row">
@@ -287,48 +431,151 @@ class EchlTrackerCard extends LitElement {
         </div>
       ` : ""}
 
-      ${this.config.show_shots && (a.away_shots != null || a.home_shots != null) ? html`
-        <div class="stats-row">
+      ${this.config.show_shots && showScores && (a.away_shots != null || a.home_shots != null) ? html`
+        <div class="stats-grid">
           <span>${a.away_shots ?? "—"}</span>
-          <span class="stats-label">Shots on Goal</span>
+          <span>Shots on Goal</span>
           <span>${a.home_shots ?? "—"}</span>
         </div>
       ` : ""}
 
-      ${a.venue ? html`
-        <div class="stats-row">
-          <span style="flex:1;text-align:center">${a.venue}</span>
-        </div>
-      ` : ""}
+      ${a.venue ? html`<div class="venue-row">${a.venue}</div>` : ""}
     `;
   }
 
-  _renderNoGame(a) {
-    const hasNext = this.config.show_next_game && a.next_game_date;
+  // ------------------------------------------------------------------
+  // Upcoming view (NO_GAME, PRE >30min, old FINAL)
+  // ------------------------------------------------------------------
+
+  _renderUpcoming(a, state) {
+    // PRE but >30 min away — we already have the game data
+    if (state === "PRE") {
+      return html`
+        <div class="upcoming">
+          <div class="upcoming-label">Today's Game</div>
+          ${this._upcomingTeams(a.away_logo_url, a.away_team, a.home_logo_url, a.home_team)}
+          <div class="upcoming-time">${this._fmtGameTime(a.start_time)}</div>
+          ${a.venue ? html`<div class="upcoming-venue">${a.venue}</div>` : ""}
+        </div>
+      `;
+    }
+
+    if (!this.config.show_next_game) return html``;
+
+    // Build next-game data from attributes
+    const hasNext = a.next_game_date;
+    if (!hasNext) {
+      return html`<div class="no-games">No upcoming games scheduled</div>`;
+    }
+
+    const awayLogo = a.next_game_away_logo_url;
+    const homeLogo = a.next_game_home_logo_url;
+    const awayTeam = a.next_game_away_team;
+    const homeTeam = a.next_game_home_team;
+
     return html`
-      <div class="no-game">No game scheduled today</div>
-      ${hasNext ? html`
-        <div class="next-game">
-          <div class="next-game-label">Next Game</div>
-          <div class="next-game-detail">
-            ${a.next_game_home ? "vs" : "@"} ${a.next_game_opponent ?? "TBD"}
-          </div>
-          <div class="next-game-sub">${this._fmtDate(a.next_game_date)}</div>
-          ${a.next_game_venue ? html`<div class="next-game-sub">${a.next_game_venue}</div>` : ""}
-        </div>
-      ` : ""}
+      <div class="upcoming">
+        <div class="upcoming-label">Next Game</div>
+        ${this._upcomingTeams(awayLogo, awayTeam, homeLogo, homeTeam)}
+        <div class="upcoming-time">${this._fmtGameTime(a.next_game_date)}</div>
+        ${a.next_game_venue ? html`<div class="upcoming-venue">${a.next_game_venue}</div>` : ""}
+      </div>
     `;
   }
 
-  _fmtDate(iso) {
+  _upcomingTeams(awayLogo, awayName, homeLogo, homeName) {
+    return html`
+      <div class="upcoming-teams">
+        <div class="upcoming-team">
+          ${this._logo(awayLogo, 40)}
+          <span>${awayName ?? "Away"}</span>
+        </div>
+        <span class="upcoming-at">@</span>
+        <div class="upcoming-team">
+          ${this._logo(homeLogo, 40)}
+          <span>${homeName ?? "Home"}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // ------------------------------------------------------------------
+  // Recent games
+  // ------------------------------------------------------------------
+
+  _renderRecentGames(games) {
+    const count = Math.min(this.config.recent_games_count || 3, games.length);
+    return html`
+      <div class="recent-games">
+        <div class="section-label">Recent Games</div>
+        ${games.slice(0, count).map(g => html`
+          <div class="recent-row">
+            <span class="result ${g.win ? 'result-w' : 'result-l'}">${g.win ? "W" : "L"}</span>
+            <span class="recent-opp">${g.is_home ? "vs" : "@"} ${g.opponent}</span>
+            <span class="recent-score">${g.team_score}–${g.opponent_score}</span>
+            <span class="recent-date">${this._fmtShortDate(g.date)}</span>
+          </div>
+        `)}
+      </div>
+    `;
+  }
+
+  // ------------------------------------------------------------------
+  // Helpers
+  // ------------------------------------------------------------------
+
+  _logo(url, size = 56) {
+    if (!this.config.show_logo) return html``;
+    if (url) {
+      return html`
+        <img
+          class="team-logo-img"
+          style="width:${size}px;height:${size}px"
+          src="${url}"
+          alt=""
+          @error=${(e) => { e.target.style.display = "none"; }}
+        >`;
+    }
+    return html`<ha-icon class="team-logo-icon" style="--mdc-icon-size:${size}px" icon="mdi:hockey-puck"></ha-icon>`;
+  }
+
+  _fmtGameTime(iso) {
+    if (!iso) return "";
     try {
+      const tz = this.hass?.config?.time_zone ?? undefined;
       return new Date(iso).toLocaleString(undefined, {
-        weekday: "short", month: "short", day: "numeric",
-        hour: "numeric", minute: "2-digit",
+        timeZone: tz,
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZoneName: "short",
       });
     } catch {
       return iso;
     }
+  }
+
+  _fmtShortDate(iso) {
+    if (!iso) return "";
+    try {
+      const tz = this.hass?.config?.time_zone ?? undefined;
+      return new Date(iso).toLocaleDateString(undefined, {
+        timeZone: tz,
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return iso;
+    }
+  }
+
+  async _refresh() {
+    if (!this.hass || !this.config.entity) return;
+    await this.hass.callService("homeassistant", "update_entity", {
+      entity_id: this.config.entity,
+    });
   }
 }
 
