@@ -1,5 +1,5 @@
 /**
- * Hockey Tracker Card v1.2.2
+ * Hockey Tracker Card v1.2.3
  * https://github.com/linkian19/ha-hockey-tracker-card
  */
 import { LitElement, html, css } from "https://unpkg.com/lit@2.8.0/index.js?module";
@@ -546,11 +546,12 @@ class HockeyTrackerCard extends LitElement {
   // ------------------------------------------------------------------
 
   _renderUpcoming(a, state) {
-    // PRE but >30 min away — game data already available
+    // PRE — show home/away matchup, label depends on whether game is actually today
     if (state === "PRE") {
+      const label = this._isToday(a.start_time) ? "Today's Game" : "Next Game";
       return html`
         <div class="ht-next-game">
-          <div class="ht-next-game-label">Today's Game</div>
+          <div class="ht-next-game-label">${label}</div>
           ${this._upcomingTeams(a.away_logo_url, a.away_team, a.home_logo_url, a.home_team)}
           <div class="ht-next-game-time">${this._fmtGameTime(a.start_time)}</div>
           ${a.venue ? html`<div class="ht-next-game-venue">${a.venue}</div>` : ""}
@@ -689,6 +690,20 @@ class HockeyTrackerCard extends LitElement {
         >`;
     }
     return html`<ha-icon class="ht-logo-icon" style="--mdc-icon-size:${size}px" icon="mdi:hockey-puck"></ha-icon>`;
+  }
+
+  _isToday(iso) {
+    if (!iso) return false;
+    try {
+      const tz = this.hass?.config?.time_zone ?? undefined;
+      const opts = { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" };
+      return (
+        new Date(iso).toLocaleDateString(undefined, opts) ===
+        new Date().toLocaleDateString(undefined, opts)
+      );
+    } catch {
+      return new Date(iso).toDateString() === new Date().toDateString();
+    }
   }
 
   _fmtGameTime(iso) {
