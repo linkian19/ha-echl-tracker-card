@@ -1,5 +1,5 @@
 /**
- * Hockey Tracker Card v1.2.5
+ * Hockey Tracker Card v1.2.6
  * https://github.com/linkian19/ha-hockey-tracker-card
  */
 import { LitElement, html, css } from "https://unpkg.com/lit@2.8.0/index.js?module";
@@ -14,7 +14,20 @@ class HockeyTrackerCardEditor extends LitElement {
   }
 
   setConfig(config) {
-    this.config = config;
+    this.config = {
+      show_logo: true,
+      show_shots: true,
+      show_next_game: true,
+      show_recent_games: false,
+      recent_games_count: 3,
+      collapsible_recent: true,
+      auto_collapse_recent: true,
+      show_events: false,
+      events_count: 10,
+      collapsible_events: true,
+      logo_size: 64,
+      ...config,
+    };
   }
 
   static get _schema() {
