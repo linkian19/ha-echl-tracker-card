@@ -1,5 +1,5 @@
 /**
- * Hockey Tracker Card v1.2.4
+ * Hockey Tracker Card v1.2.5
  * https://github.com/linkian19/ha-hockey-tracker-card
  */
 import { LitElement, html, css } from "https://unpkg.com/lit@2.8.0/index.js?module";
@@ -30,12 +30,15 @@ class HockeyTrackerCardEditor extends LitElement {
         default: 3,
         selector: { number: { min: 1, max: 10, step: 1, mode: "box" } },
       },
+      { name: "collapsible_recent", selector: { boolean: {} } },
+      { name: "auto_collapse_recent", selector: { boolean: {} } },
       { name: "show_events", selector: { boolean: {} } },
       {
         name: "events_count",
         default: 10,
         selector: { number: { min: 3, max: 25, step: 1, mode: "box" } },
       },
+      { name: "collapsible_events", selector: { boolean: {} } },
       {
         name: "logo_size",
         default: 64,
@@ -53,9 +56,12 @@ class HockeyTrackerCardEditor extends LitElement {
       show_next_game:     "Show next game when no game is active",
       show_recent_games:  "Show recent game results",
       recent_games_count: "Number of recent games to show (1–10, default: 3)",
-      show_events:        "Show live game events (goals & penalties) during active games",
-      events_count:       "Number of events to display (3–25, default: 10)",
-      logo_size:          "Logo size in px (24–200, default: 64)",
+      collapsible_recent:   "Allow recent games section to be collapsed",
+      auto_collapse_recent: "Auto-collapse recent games when a game goes live",
+      show_events:          "Show live game events (goals & penalties) during active games",
+      events_count:         "Number of events to display (3–25, default: 10)",
+      collapsible_events:   "Allow game events section to be collapsed",
+      logo_size:            "Logo size in px (24–200, default: 64)",
     }[schema.name] ?? schema.name;
   }
 
@@ -91,6 +97,11 @@ class HockeyTrackerCard extends LitElement {
 
   // Track when the sensor first entered FINAL state so we can apply the 30-min buffer
   _finalAt = null;
+
+  // Collapse state for optional sections
+  _recentCollapsed = false;
+  _eventsCollapsed = false;
+  _prevLive = false;
 
   static get styles() {
     return css`
@@ -343,13 +354,25 @@ class HockeyTrackerCard extends LitElement {
         margin-top: 10px;
         padding-top: 8px;
       }
+      .ht-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+      }
       .ht-section-label {
         font-size: 0.72rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: var(--secondary-text-color);
-        margin-bottom: 6px;
+        margin-bottom: 0;
+      }
+      .ht-collapse-btn {
+        --mdc-icon-size: 16px;
+        color: var(--secondary-text-color);
+        cursor: pointer;
+        flex-shrink: 0;
       }
       .ht-recent-row {
         display: flex;
@@ -400,8 +423,11 @@ class HockeyTrackerCard extends LitElement {
       show_next_game: true,
       show_recent_games: false,
       recent_games_count: 3,
+      collapsible_recent: true,
+      auto_collapse_recent: true,
       show_events: false,
       events_count: 10,
+      collapsible_events: true,
       logo_size: 64,
     };
   }
@@ -414,8 +440,11 @@ class HockeyTrackerCard extends LitElement {
       show_next_game: true,
       show_recent_games: false,
       recent_games_count: 3,
+      collapsible_recent: true,
+      auto_collapse_recent: true,
       show_events: false,
       events_count: 10,
+      collapsible_events: true,
       logo_size: 64,
       ...config,
     };
@@ -459,6 +488,14 @@ class HockeyTrackerCard extends LitElement {
     const state = stateObj.state;
     const a = stateObj.attributes;
     const mode = this._displayMode(state, a);
+
+    // Auto-collapse recent games on LIVE transition; restore on exit
+    const isLive = state === "LIVE";
+    if (this.config.auto_collapse_recent !== false) {
+      if (isLive && !this._prevLive) this._recentCollapsed = true;
+      else if (!isLive && this._prevLive) this._recentCollapsed = false;
+    }
+    this._prevLive = isLive;
 
     const badgeClass = { LIVE: "ht-badge--live", PRE: "ht-badge--pre", FINAL: "ht-badge--final", NO_GAME: "ht-badge--none" }[state] ?? "ht-badge--none";
     const badgeLabel = { LIVE: "Live", PRE: "Pre-Game", FINAL: "Final", NO_GAME: "No Game" }[state] ?? state;
@@ -606,12 +643,23 @@ class HockeyTrackerCard extends LitElement {
 
   _renderGameEvents(events) {
     const count = Math.min(this.config.events_count || 10, events.length);
+    const collapsible = this.config.collapsible_events !== false;
+    const collapsed = collapsible && this._eventsCollapsed;
     return html`
       <div class="ht-events">
-        <div class="ht-section-label">Game Events</div>
-        ${events.slice(0, count).map(e =>
+        <div class="ht-section-header">
+          <span class="ht-section-label">Game Events</span>
+          ${collapsible ? html`
+            <ha-icon
+              class="ht-collapse-btn"
+              icon="${collapsed ? "mdi:chevron-down" : "mdi:chevron-up"}"
+              @click=${() => { this._eventsCollapsed = !this._eventsCollapsed; this.requestUpdate(); }}
+            ></ha-icon>
+          ` : ""}
+        </div>
+        ${!collapsed ? events.slice(0, count).map(e =>
           e.type === "goal" ? this._renderGoal(e) : this._renderPenalty(e)
-        )}
+        ) : ""}
       </div>
     `;
   }
@@ -650,17 +698,28 @@ class HockeyTrackerCard extends LitElement {
 
   _renderRecentGames(games) {
     const count = Math.min(this.config.recent_games_count || 3, games.length);
+    const collapsible = this.config.collapsible_recent !== false;
+    const collapsed = collapsible && this._recentCollapsed;
     return html`
       <div class="ht-recent">
-        <div class="ht-section-label">Recent Games</div>
-        ${games.slice(0, count).map(g => html`
+        <div class="ht-section-header">
+          <span class="ht-section-label">Recent Games</span>
+          ${collapsible ? html`
+            <ha-icon
+              class="ht-collapse-btn"
+              icon="${collapsed ? "mdi:chevron-down" : "mdi:chevron-up"}"
+              @click=${() => { this._recentCollapsed = !this._recentCollapsed; this.requestUpdate(); }}
+            ></ha-icon>
+          ` : ""}
+        </div>
+        ${!collapsed ? games.slice(0, count).map(g => html`
           <div class="ht-recent-row">
             <span class="ht-result ${g.win ? 'ht-result--win' : 'ht-result--loss'}">${g.win ? "W" : "L"}</span>
             <span class="ht-opponent">${g.is_home ? "vs" : "@"} ${g.opponent}</span>
             <span class="ht-recent-score">${g.team_score}–${g.opponent_score}</span>
             <span class="ht-recent-date">${this._fmtShortDate(g.date)}</span>
           </div>
-        `)}
+        `) : ""}
       </div>
     `;
   }

@@ -71,8 +71,11 @@ entity: sensor.kansas_city_mavericks_game
 | `show_next_game` | boolean | `true` | Show next game info when no game is active |
 | `show_recent_games` | boolean | `false` | Show recent game results below the main view |
 | `recent_games_count` | number | `3` | Number of recent games to show (1–10) |
+| `collapsible_recent` | boolean | `true` | Show a collapse toggle on the Recent Games section |
+| `auto_collapse_recent` | boolean | `true` | Auto-collapse Recent Games when a game goes live |
 | `show_events` | boolean | `false` | Show live game events (goals & penalties) during active games |
 | `events_count` | number | `10` | Number of events to display (3–25) |
+| `collapsible_events` | boolean | `true` | Show a collapse toggle on the Game Events section |
 
 ### Example with all options
 
@@ -86,8 +89,11 @@ show_shots: true
 show_next_game: true
 show_recent_games: true
 recent_games_count: 5
+collapsible_recent: true
+auto_collapse_recent: true
 show_events: true
 events_count: 10
+collapsible_events: true
 ```
 
 ---
@@ -159,7 +165,9 @@ All elements in the card have stable, prefixed CSS class names so you can target
 | `.ht-event-tag` | PP / SH / EN badge on goals |
 | `.ht-event-assists` | Assist names on goals |
 | `.ht-recent` | Recent games section |
-| `.ht-section-label` | "Recent Games" section header |
+| `.ht-section-header` | Header row containing section label + collapse toggle |
+| `.ht-section-label` | Section label text ("Recent Games", "Game Events") |
+| `.ht-collapse-btn` | Chevron collapse/expand toggle icon |
 | `.ht-recent-row` | Individual recent game row |
 | `.ht-result` | W/L result indicator |
 | `.ht-result--win` | Win result color |
