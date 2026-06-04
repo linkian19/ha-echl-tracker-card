@@ -1,5 +1,5 @@
 /**
- * Hockey Tracker Card v1.10.0
+ * Hockey Tracker Card v1.11.0
  * https://github.com/linkian19/ha-hockey-tracker-card
  *
  * Inspired by ha-teamtracker (https://github.com/vasqued2/ha-teamtracker) by vasqued2.
@@ -458,6 +458,22 @@ class HockeyTrackerCard extends LitElement {
         flex-shrink: 0;
         opacity: 0.6;
       }
+
+      /* ── Game page link ─────────────────────────────── */
+      .ht-game-link {
+        text-align: center;
+        margin-top: 6px;
+        font-size: 0.78rem;
+      }
+      .ht-game-link a {
+        color: var(--primary-color, #03a9f4);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .ht-game-link a:hover { text-decoration: underline; }
+      .ht-game-link ha-icon { --mdc-icon-size: 13px; }
     `;
   }
 
@@ -642,6 +658,14 @@ class HockeyTrackerCard extends LitElement {
       ` : ""}
 
       ${a.venue ? html`<div class="ht-venue">${a.venue}</div>` : ""}
+
+      ${(state === "LIVE" || state === "FINAL") && a.game_url ? html`
+        <div class="ht-game-link">
+          <a href="${a.game_url}" target="_blank" rel="noopener noreferrer">
+            <ha-icon icon="mdi:open-in-new"></ha-icon>View on league site
+          </a>
+        </div>
+      ` : ""}
     `;
   }
 
@@ -767,15 +791,12 @@ class HockeyTrackerCard extends LitElement {
   }
 
   _renderShot(e) {
-    const shotType = e.shot_type
-      ? e.shot_type.charAt(0).toUpperCase() + e.shot_type.slice(1).replace(/-/g, " ")
-      : "";
     return html`
       <div class="ht-event-row ht-event-shot ${e.is_tracked_team ? "ht-event--ours" : ""}">
         <span class="ht-event-dot"></span>
         <span class="ht-event-meta">P${e.period} · ${e.time}</span>
         <span class="ht-event-abbrev">${e.team_abbrev}</span>
-        <span class="ht-event-body">${e.player_name}${shotType ? ` — ${shotType}` : ""}</span>
+        <span class="ht-event-body">${e.player_name}</span>
       </div>
     `;
   }
@@ -1538,6 +1559,15 @@ class HockeyPlayoffCard extends LitElement {
         </div>
       ` : ""}
       ${attr.venue ? html`<div class="ht-venue">${attr.venue}</div>` : ""}
+
+      ${(state === "LIVE" || state === "FINAL") && attr.game_url ? html`
+        <div class="ht-game-link">
+          <a href="${attr.game_url}" target="_blank" rel="noopener noreferrer">
+            <ha-icon icon="mdi:open-in-new"></ha-icon>View on league site
+          </a>
+        </div>
+      ` : ""}
+
       ${this._renderPlayoffEvents(attr, true)}
     `;
   }
@@ -1703,9 +1733,7 @@ class HockeyPlayoffCard extends LitElement {
                   ${e.is_short_handed ? html`<span class="ht-event-tag">SH</span>` : ""}
                   ${e.is_empty_net ? html`<span class="ht-event-tag">EN</span>` : ""}
                   ${e.assists?.length ? html`<span class="ht-event-assists"> · ${e.assists.join(", ")}</span>` : ""}
-                ` : e.type === "shot" ? html`
-                  ${e.shot_type ? html`<span class="ht-event-assists"> — ${e.shot_type.charAt(0).toUpperCase()}${e.shot_type.slice(1).replace(/-/g, " ")}</span>` : ""}
-                ` : html`<span class="ht-event-assists">${e.description || ""} ${e.minutes ? `(${e.minutes} min)` : ""}</span>`}
+                ` : e.type === "shot" ? html`` : html`<span class="ht-event-assists">${e.description || ""} ${e.minutes ? `(${e.minutes} min)` : ""}</span>`}
               </span>
             </div>
           `;
@@ -1766,7 +1794,7 @@ window.customCards.push({
   type: "hockey-tracker-card",
   name: "Hockey Tracker Card",
   description: "Live scores, schedule, and stats for any supported hockey league team.",
-  version: "1.10.0",
+  version: "1.11.0",
   preview: false,
   documentationURL: "https://github.com/linkian19/ha-hockey-tracker-card",
 });
@@ -1774,7 +1802,7 @@ window.customCards.push({
   type: "hockey-playoff-card",
   name: "Hockey Playoff Card",
   description: "Playoff bracket and live game view for followed teams across any supported league.",
-  version: "1.10.0",
+  version: "1.11.0",
   preview: false,
   documentationURL: "https://github.com/linkian19/ha-hockey-tracker-card",
 });
