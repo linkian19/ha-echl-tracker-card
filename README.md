@@ -7,7 +7,7 @@ This package includes two card types:
 - **`hockey-tracker-card`** — Live scoreboard, game events, and recent results for a single tracked team
 - **`hockey-playoff-card`** — Full playoff bracket view with live game data for up to 4 followed teams
 
-> **Requires:** [ha-hockey-tracker](https://github.com/linkian19/ha-hockey-tracker) integration (v1.5.0+) to be installed and at least one sensor configured first.
+> **Requires:** [ha-hockey-tracker](https://github.com/linkian19/ha-hockey-tracker) integration (v1.9.0+) to be installed and at least one sensor configured first.
 
 ---
 
@@ -24,7 +24,8 @@ This package includes two card types:
 - Pre-game upcoming view with team matchup, start time, and venue
 - Next game preview when no game is active
 - Team logo displayed during off-season / no upcoming games
-- Optional live game events feed (goals & penalties with PP/SH/EN badges)
+- **Last Game history toggle** — when no game is active (`NO_GAME` or `PRE`), a history button (🕐) appears in the header to show the previous game's final scoreboard, shots, venue, event feed, and a link to the game summary. Data is auto-populated after HA restarts; a "Load Last Game" button re-fetches it on demand if needed.
+- Optional live game events feed (goals & penalties with PP/SH/EN badges; shots on goal shown as `SOG: <player name>`)
 - Optional recent game results list (W/L, score, opponent, date) — rows link to official game summaries
 - Full UI editor — no YAML required
 - Named CSS classes for styling with [card-mod](https://github.com/thomasloven/lovelace-card-mod)
@@ -149,8 +150,11 @@ The card automatically switches between views based on game state:
 | Game just ended (`FINAL`) | Full scoreboard with final scores (stays for up to 2 hours) |
 | `NO_GAME` with upcoming game | Next game preview |
 | `NO_GAME` with no upcoming games (off-season, eliminated) | Team logo + "No upcoming games scheduled" |
+| Last Game (history button active) | Previous game's final scoreboard, shots, events, and game link |
 
 The 2-hour post-game window is managed server-side by the integration, so it persists across browser refreshes and new HA sessions.
+
+The **history button** (🕐) appears in the header during `NO_GAME` and `PRE` states and automatically hides when a live or final game becomes active. If last game data is unavailable (e.g. after an HA reboot before the integration has polled a completed game), a "Load Last Game" button is shown — tapping it calls `hockey_tracker.force_refresh` to populate the data without requiring persistent storage.
 
 ---
 
@@ -301,6 +305,12 @@ All elements in the `hockey-tracker-card` have stable `ht-` prefixed CSS class n
 | `.ht-recent-score` | Score in recent row |
 | `.ht-recent-date` | Date in recent row |
 | `.ht-recent-link-icon` | External link icon on clickable recent game rows |
+| `.ht-history-btn` | History (last game) toggle button in the header |
+| `.ht-history-btn--active` | Modifier when the last game view is open |
+| `.ht-last-game-label` | "Last Game" section label in history view |
+| `.ht-last-game-empty` | Container shown when no last game data is available |
+| `.ht-last-game-empty-text` | Text inside the empty last game state |
+| `.ht-last-game-load-btn` | "Load Last Game" button shown when data is unavailable |
 
 ### Example card-mod usage
 

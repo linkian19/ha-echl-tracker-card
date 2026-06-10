@@ -127,6 +127,8 @@ class HockeyTrackerCard extends LitElement {
   _recentCollapsed = false;
   _eventsCollapsed = false;
   _prevLive = false;
+  _showLastGame = false;
+  _failedLogos = new Set();
   // Timer for updating the "last updated X ago" display
   _ageTimer = null;
 
@@ -171,6 +173,14 @@ class HockeyTrackerCard extends LitElement {
         --mdc-icon-size: 18px;
         color: var(--secondary-text-color);
         margin-right: -4px;
+      }
+      .ht-history-btn {
+        --mdc-icon-button-size: 32px;
+        --mdc-icon-size: 18px;
+        color: var(--secondary-text-color);
+      }
+      .ht-history-btn--active {
+        color: var(--primary-color);
       }
       .ht-last-updated {
         text-align: right;
@@ -239,6 +249,41 @@ class HockeyTrackerCard extends LitElement {
       }
 
       /* ── Period / game info rows ─────────────────────── */
+      .ht-last-game-label {
+        text-align: center;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--secondary-text-color);
+        margin-bottom: 8px;
+      }
+      .ht-last-game-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 20px 0 12px;
+      }
+      .ht-last-game-empty-text {
+        font-size: 0.85rem;
+        color: var(--secondary-text-color);
+      }
+      .ht-last-game-load-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 16px;
+        border-radius: 6px;
+        border: 1px solid var(--primary-color);
+        background: transparent;
+        color: var(--primary-color);
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .ht-last-game-load-btn:hover { background: var(--primary-color); color: #fff; }
+      .ht-last-game-load-btn ha-icon { --mdc-icon-size: 15px; }
       .ht-period, .ht-venue {
         text-align: center;
         font-size: 0.82rem;
@@ -524,6 +569,29 @@ class HockeyTrackerCard extends LitElement {
     };
   }
 
+  updated(changedProps) {
+    super.updated(changedProps);
+    if (!changedProps.has("hass")) return;
+    const stateObj = this.hass?.states[this.config?.entity];
+    if (!stateObj) return;
+    const state = stateObj.state;
+    if ((state === "LIVE" || state === "FINAL") && this._showLastGame) {
+      this._showLastGame = false;
+      this.requestUpdate();
+    }
+    const isLive = state === "LIVE";
+    if (this.config.auto_collapse_recent !== false) {
+      if (isLive && !this._prevLive) {
+        this._recentCollapsed = true;
+        this.requestUpdate();
+      } else if (!isLive && this._prevLive) {
+        this._recentCollapsed = false;
+        this.requestUpdate();
+      }
+    }
+    this._prevLive = isLive;
+  }
+
   connectedCallback() {
     super.connectedCallback();
     // Refresh the "X ago" age display every 30 seconds without a full HA update
@@ -565,15 +633,11 @@ class HockeyTrackerCard extends LitElement {
 
     const state = stateObj.state;
     const a = stateObj.attributes;
-    const mode = this._displayMode(state, a);
 
-    // Auto-collapse recent games on LIVE transition; restore on exit
-    const isLive = state === "LIVE";
-    if (this.config.auto_collapse_recent !== false) {
-      if (isLive && !this._prevLive) this._recentCollapsed = true;
-      else if (!isLive && this._prevLive) this._recentCollapsed = false;
-    }
-    this._prevLive = isLive;
+    // History button only makes sense when there's no active game to watch
+    const canShowHistory = state === "NO_GAME" || state === "PRE";
+    const showingLastGame = this._showLastGame && canShowHistory;
+    const mode = showingLastGame ? "last_game" : this._displayMode(state, a);
 
     const badgeClass = { LIVE: "ht-badge--live", PRE: "ht-badge--pre", FINAL: "ht-badge--final", NO_GAME: "ht-badge--none" }[state] ?? "ht-badge--none";
     const badgeLabel = { LIVE: "Live", PRE: "Pre-Game", FINAL: "Final", NO_GAME: "No Game" }[state] ?? state;
@@ -584,6 +648,15 @@ class HockeyTrackerCard extends LitElement {
           <div class="ht-header">
             <span class="ht-badge ${badgeClass}">${badgeLabel}</span>
             <span class="ht-title">${this._cardTitle(a, stateObj)}</span>
+            ${canShowHistory ? html`
+              <ha-icon-button
+                class="ht-history-btn${showingLastGame ? " ht-history-btn--active" : ""}"
+                label="${showingLastGame ? "Current" : "Last Game"}"
+                @click=${() => { this._showLastGame = !this._showLastGame; this.requestUpdate(); }}
+              >
+                <ha-icon icon="${showingLastGame ? "mdi:close" : "mdi:history"}"></ha-icon>
+              </ha-icon-button>
+            ` : ""}
             <ha-icon-button class="ht-refresh-btn" label="Refresh" @click=${this._refresh}>
               <ha-icon icon="mdi:refresh"></ha-icon>
             </ha-icon-button>
@@ -593,12 +666,18 @@ class HockeyTrackerCard extends LitElement {
             <div class="ht-last-updated">Updated ${this._fmtAge(a.last_fetched)}</div>
           ` : ""}
 
-          ${mode === "game"
+          ${mode === "last_game"
+            ? this._renderLastGame(a)
+            : mode === "game"
             ? this._renderGame(a, state)
             : this._renderUpcoming(a, state)}
 
-          ${this.config.show_events && mode === "game" && a.game_events?.length
-            ? this._renderGameEvents(a.game_events)
+          ${this.config.show_events
+            ? mode === "last_game" && a.last_game_events?.length
+              ? this._renderGameEvents(a.last_game_events)
+              : mode === "game" && a.game_events?.length
+              ? this._renderGameEvents(a.game_events)
+              : ""
             : ""}
 
           ${this.config.show_recent_games && a.recent_games?.length
@@ -662,6 +741,65 @@ class HockeyTrackerCard extends LitElement {
       ${(state === "LIVE" || state === "FINAL") && a.game_url ? html`
         <div class="ht-game-link">
           <a href="${a.game_url}" target="_blank" rel="noopener noreferrer">
+            <ha-icon icon="mdi:open-in-new"></ha-icon>View on league site
+          </a>
+        </div>
+      ` : ""}
+    `;
+  }
+
+  // ------------------------------------------------------------------
+  // Last game view (previous completed game, toggled via history button)
+  // ------------------------------------------------------------------
+
+  _renderLastGame(a) {
+    if (!a.last_game_home_team) {
+      return html`
+        <div class="ht-last-game-empty">
+          <div class="ht-last-game-empty-text">No saved data from last game</div>
+          <button class="ht-last-game-load-btn" @click=${this._refresh}>
+            <ha-icon icon="mdi:download"></ha-icon>
+            Load Last Game
+          </button>
+        </div>
+      `;
+    }
+
+    return html`
+      <div class="ht-last-game-label">Previous Game · Final</div>
+      <div class="ht-scoreboard">
+        <div class="ht-team">
+          ${this._logo(a.last_game_away_logo_url)}
+          <div class="ht-team-name">${a.last_game_away_team ?? "Away"}</div>
+          <div class="ht-score">${a.last_game_away_score ?? "—"}</div>
+        </div>
+        <div class="ht-mid">
+          <span class="ht-at-sign">@</span>
+        </div>
+        <div class="ht-team">
+          ${this._logo(a.last_game_home_logo_url)}
+          <div class="ht-team-name">${a.last_game_home_team ?? "Home"}</div>
+          <div class="ht-score">${a.last_game_home_score ?? "—"}</div>
+        </div>
+      </div>
+
+      ${this.config.show_shots && (a.last_game_away_shots != null || a.last_game_home_shots != null) ? html`
+        <div class="ht-shots">
+          <span>${a.last_game_away_shots ?? "—"}</span>
+          <span>Shots on Goal</span>
+          <span>${a.last_game_home_shots ?? "—"}</span>
+        </div>
+      ` : ""}
+
+      ${a.last_game_venue ? html`<div class="ht-venue">${a.last_game_venue}</div>` : ""}
+
+      ${a.last_game_date ? html`
+        <div class="ht-venue">${this._fmtGameTime(a.last_game_date)}</div>
+      ` : ""}
+
+      ${a.last_game_url ? html`
+        <div class="ht-game-link">
+          <a href="${a.last_game_url}" target="_blank" rel="noopener noreferrer">
             <ha-icon icon="mdi:open-in-new"></ha-icon>View on league site
           </a>
         </div>
@@ -796,7 +934,7 @@ class HockeyTrackerCard extends LitElement {
         <span class="ht-event-dot"></span>
         <span class="ht-event-meta">P${e.period} · ${e.time}</span>
         <span class="ht-event-abbrev">${e.team_abbrev}</span>
-        <span class="ht-event-body">${e.player_name}</span>
+        <span class="ht-event-body">SOG: ${e.player_name}</span>
       </div>
     `;
   }
@@ -852,14 +990,14 @@ class HockeyTrackerCard extends LitElement {
   _logo(url, size) {
     size = size ?? this.config.logo_size ?? 64;
     if (!this.config.show_logo) return html``;
-    if (url) {
+    if (url && !this._failedLogos.has(url)) {
       return html`
         <img
           class="ht-logo"
           style="width:${size}px;height:${size}px"
           src="${url}"
           alt=""
-          @error=${(e) => { e.target.style.display = "none"; }}
+          @error=${() => { this._failedLogos.add(url); this.requestUpdate(); }}
         >`;
     }
     return html`<ha-icon class="ht-logo-icon" style="--mdc-icon-size:${size}px" icon="mdi:hockey-puck"></ha-icon>`;
@@ -1150,6 +1288,8 @@ class HockeyPlayoffCard extends LitElement {
       show_last_updated: true,
       ...config,
     };
+    this._autoCollapseDone = false;
+    this._failedLogos = new Set();
   }
 
   static getConfigElement() {
@@ -1743,6 +1883,7 @@ class HockeyPlayoffCard extends LitElement {
   }
 
   async _refresh() {
+    if (!this.hass || !this.config?.entity) return;
     try {
       await this.hass.callService("hockey_tracker", "force_refresh", { entity_id: this.config.entity });
     } catch {
@@ -1794,7 +1935,7 @@ window.customCards.push({
   type: "hockey-tracker-card",
   name: "Hockey Tracker Card",
   description: "Live scores, schedule, and stats for any supported hockey league team.",
-  version: "1.11.0",
+  version: "1.12.0",
   preview: false,
   documentationURL: "https://github.com/linkian19/ha-hockey-tracker-card",
 });
@@ -1802,7 +1943,7 @@ window.customCards.push({
   type: "hockey-playoff-card",
   name: "Hockey Playoff Card",
   description: "Playoff bracket and live game view for followed teams across any supported league.",
-  version: "1.11.0",
+  version: "1.12.0",
   preview: false,
   documentationURL: "https://github.com/linkian19/ha-hockey-tracker-card",
 });
